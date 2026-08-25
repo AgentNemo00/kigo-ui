@@ -59,6 +59,7 @@ func (s *Socket) Open(ctx context.Context, name string, bufferSize int, timeoutP
 			if err != nil {
 				log.Ctx(ctx).Err(err)
 			}
+			close(received)
 			s.closed = true
 		},
 		func () string {
