@@ -13,6 +13,7 @@ import (
 
 type IPC struct {
 	path string
+	closed bool
 }
 
 func NewIPC(path string) (*IPC, error) {
@@ -30,44 +31,41 @@ func (i *IPC) Open(ctx context.Context, name string, bufferSize int, timeoutPerR
     if err != nil {
         return nil, err
     }
-	return &Frame{
-		started: false,
-		startAt: time.Now(),
-		endAt: time.Now(),
-		bufferEmptyTimeout: time.Now(),
-		timeoutPerRead: timeoutPerRead,
-		timeoutTotal: timeoutTotal,
-		read: func () ([]byte, error) {
-		for {
-			// blocking
-			select{
-			case <- ctx.Done():
-				return nil, ctx.Err()
-			default:
-				msg, err := rb.ReadMsg()
-				if err != nil {
-					if errors.Is(err, ringbuffer.ErrBufferEmpty) {
-						return nil, ErrEmpty
-					}else if errors.Is(err, ringbuffer.ErrClosed) {
-						return nil, ErrClosed
-					} else {
-						return nil, err
-					}
+	f := NewFrame(
+		func (Nctx context.Context) ([]byte, error) {
+		select{
+		case <- Nctx.Done():
+			return nil, Nctx.Err()
+		default:
+			msg, err := rb.ReadMsg()
+			if err != nil {
+				if errors.Is(err, ringbuffer.ErrBufferEmpty) {
+					return nil, ErrEmpty
+				}else if errors.Is(err, ringbuffer.ErrClosed) {
+					return nil, ErrClosed
 				}
-				return msg, nil
+				return nil, nil
 			}
+			return msg, nil
 		}
 		},
-		close: func ()  {
+		func ()  {
+			if i.closed {
+				return
+			}
 			err := rb.Close()
 			if err != nil {
 				log.Ctx(ctx).Err(err)
 			}
+			i.closed = true
 		},
-		name: func () string {
+		func () string {
 			return path.Join(i.path, name)
 		},
-	}, nil
+		timeoutPerRead,
+		timeoutTotal,
+	)
+	return f, nil
 }
 
 func pathExists(path string) bool {

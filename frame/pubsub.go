@@ -30,27 +30,25 @@ func (p *PubSub) Open(ctx context.Context, name string, timeoutPerRead time.Dura
 	frameHandler := &Frame{
 		started: false,
 		startAt: time.Now(),
-		endAt: time.Now(),
+		endAtAbsolute: time.Now(),
 		bufferEmptyTimeout: time.Now(),
 		timeoutPerRead: timeoutPerRead,
-		timeoutTotal: timeoutTotal,
-		read: func() ([]byte, error) {
-			for {
-				// blocking
-				select{
-				case <- ctx.Done():
-					return nil, ctx.Err()
-				case data, ok := <- frameChan:
-					if !ok {
-						return nil, ErrClosed
-					}
-					return data, nil
-				case data, ok := <- frameErr:
-					if !ok {
-						return nil, ErrClosed
-					}
-					return nil, data
+		read: func(Nctx context.Context) ([]byte, error) {
+			select{
+			case <- Nctx.Done():
+				return nil, Nctx.Err()
+			case data, ok := <- frameChan:
+				if !ok {
+					return nil, ErrClosed
 				}
+				return data, nil
+			case data, ok := <- frameErr:
+				if !ok {
+					return nil, ErrClosed
+				}
+				return nil, data
+			default:
+				return nil, ErrEmpty
 			}
 		},
 		name: func () string {

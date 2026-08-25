@@ -82,28 +82,25 @@ func (h *Handler) Start(ctx context.Context) error {
 		switch(data.Notification) {
 			case inquiry.InquiryRender:
 				var payload inquiry.InquiryRenderPayload
-				err := mapToStruct(data.Payload, &payload)
-				if err != nil {
-					log.Ctx(ctx).Err(err)
-					h.Error(ctx, data.From, errcore.NotificationPayloadInvalid)
+				if !h.toStruct(ctx, data, &payload) {
 					return
 				}
+				// check if configuration is conform to the received payload. If not, send an error message back to the sender
 				if !h.IsConfigConform(ctx, payload) {
 					log.Ctx(ctx).Warn("Received configuration is not adaptable: %v", payload)
 					h.Error(ctx, data.From, errcore.NotificationPayloadInvalid)
 					return 
 				}
+				// send a heartbeat
 				go h.Heartbeat(h.ctx, data.From)
-				err = h.StartRenderHandshake(h.ctx, data.From, payload)
+				// start render handshake
+				err := h.StartRenderHandshake(h.ctx, data.From, payload)
 				if err != nil {
 					log.Ctx(ctx).Err(err)
 				}
 			case inquiry.InquiryInformation:
 				var payload inquiry.InquiryInformationPayload
-				err := mapToStruct(data.Payload, &payload)
-				if err != nil {
-					log.Ctx(ctx).Err(err)
-					h.Error(ctx, data.From, errcore.NotificationPayloadInvalid)
+				if !h.toStruct(ctx, data, &payload) {
 					return
 				}
 				go h.Heartbeat(h.ctx, data.From)
@@ -143,10 +140,7 @@ func (h *Handler) Start(ctx context.Context) error {
 						log.Ctx(ctx).Debug("send screen information")
 					case information.Point:
 						payload := information.PointPayload{}
-						err := mapToStruct(data.Payload, &payload)
-						if err != nil {
-							log.Ctx(ctx).Err(err)
-							h.Error(ctx, data.From, errcore.NotificationPayloadInvalid)
+						if !h.toStruct(ctx, data, &payload) {
 							return
 						}
 						log.Ctx(ctx).Debug("inquiry position information with payload: %v", payload)
@@ -155,7 +149,7 @@ func (h *Handler) Start(ctx context.Context) error {
 							payload.X = -1
 							payload.Y = -1
 						}
-						err = h.communication.PubModule.Publish(ctx, data.From, order.Order{
+						err := h.communication.PubModule.Publish(ctx, data.From, order.Order{
 							From: h.config.Name,
 							To: data.From,
 							Order: order.OrderInformation,
@@ -171,15 +165,12 @@ func (h *Handler) Start(ctx context.Context) error {
 						}
 					case information.Area:
 						payload := information.AreaPayload{}
-						err := mapToStruct(data.Payload, &payload)
-						if err != nil {
-							log.Ctx(ctx).Err(err)
-							h.Error(ctx, data.From, errcore.NotificationPayloadInvalid)
+						if !h.toStruct(ctx, data, &payload) {
 							return
 						}
 						log.Ctx(ctx).Debug("inquiry area information with payload: %v", payload)
 						x, y, width, height := h.window.IsAreaOccupied(payload.X, payload.Y, payload.Width, payload.Height)
-						err = h.communication.PubModule.Publish(ctx, data.From, order.Order{
+						err := h.communication.PubModule.Publish(ctx, data.From, order.Order{
 							From: h.config.Name,
 							To: data.From,
 							Order: order.OrderInformation,
@@ -285,13 +276,21 @@ func (h *Handler) Transmission(ctx context.Context, dataChan chan Data, frames *
 		estimatedWaitingTime = time.Duration(time.Millisecond*time.Duration(1000/payload.FPS))
 	}
 	log.Ctx(ctx).Info("estimated sleeping: %d", estimatedWaitingTime.Milliseconds())
+	Nctx, cancel := context.WithCancel(ctx)
 	for {
 		select {
-			case <- ctx.Done():
+			case <- Nctx.Done():
+				cancel()
+				close()
 				return
 			default:
-				data, err := frames.Read()
-				if err != nil && !errors.Is(err, frame.ErrEmpty) {
+				// none blocking
+				data, err := frames.Read(Nctx)
+				if err != nil {
+					if errors.Is(err, frame.ErrEmpty){
+						continue
+					}
+					cancel()
 					close()
 					log.Ctx(ctx).Err(err)
 					return
@@ -441,6 +440,16 @@ func (h *Handler) Error(ctx context.Context, to string, errorCore int) {
 func (h *Handler) Stop(ctx context.Context) {
 	h.window.Stop()
 	h.communication.Subscription.Unsubscribe(ctx)
+}
+
+func (h *Handler) toStruct(ctx context.Context,m *notification.Notification, out any) bool {
+	err := mapToStruct(m.Payload, &out)
+	if err != nil {
+		log.Ctx(ctx).Err(err)
+		h.Error(ctx, m.From, errcore.NotificationPayloadInvalid)
+		return false
+	}
+	return true
 }
 
 func mapToStruct(m any, out any) error {

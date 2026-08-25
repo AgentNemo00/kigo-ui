@@ -1,6 +1,7 @@
 package frame
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -13,40 +14,60 @@ var (
 	ErrEmpty = fmt.Errorf("empty")
 )
 
+type (
+	Read = func(context.Context) ([]byte, error)
+	Close = func()
+	Name = func() string
+)
+
 type Frame struct {
-	read func() ([]byte, error)
-	close func()
-	name func() string
+	read Read
+	close Close
+	name Name
 	
-	started 			bool
-	startAt 			time.Time
-	endAt 				time.Time
-	bufferEmptyTimeout 	time.Time
-	timeoutPerRead 		time.Duration
-	timeoutTotal 		time.Duration
+	started 			bool 			// read at least one package
+	startAt 			time.Time		// time since when it is listening
+	endAtAbsolute 		time.Time		// end at absolut
+	bufferEmptyTimeout 	time.Time		
+	timeoutPerRead 		time.Duration	// timeout between packages
 }
 
-func (f *Frame) Read() ([]byte, error) {
-	data, err := f.read()
-	if err == nil {
-		f.bufferEmptyTimeout = time.Now()
-		if !f.started {
-			f.started = true
-			f.endAt = f.startAt.Add(f.timeoutTotal)
-		}
-		return data, nil
+func NewFrame(read Read, close Close, name Name, packageTimeout time.Duration, absoluteTimeout time.Duration) *Frame {
+	return &Frame{
+		read: read,
+		close: close,
+		name: name,
+		startAt: time.Now(),
+		endAtAbsolute: time.Now().Add(absoluteTimeout),
+		timeoutPerRead: packageTimeout,
+
 	}
+}
+
+func (f *Frame) Read(ctx context.Context) ([]byte, error) {
+	// timeout between packages
 	if f.timeoutPerRead != 0 && f.bufferEmptyTimeout.Add(f.timeoutPerRead).Before(time.Now()) && f.started {
 		return nil, ErrTimeout
 	}
-	if !f.startAt.IsZero() && f.startAt != f.endAt && f.endAt.Before(time.Now()) && f.started {
+	// timeout total
+	if !f.startAt.IsZero() && f.startAt != f.endAtAbsolute && f.endAtAbsolute.Before(time.Now()) && f.started {
 		// error timeout 
 		return nil, ErrTime
+	}
+	// none blocking
+	data, err := f.read(ctx)
+	// no error, new package
+	if err == nil {
+		f.bufferEmptyTimeout = time.Now()
+		return data, nil
 	}
 	if errors.Is(err, ErrEmpty) {
 		return nil, ErrEmpty
 	}
-	return nil, err
+	if errors.Is(err, ErrClosed) {
+		return nil, ErrClosed
+	}
+	return nil, nil
 }
 
 func (f *Frame) Close() {
@@ -56,4 +77,3 @@ func (f *Frame) Close() {
 func (f* Frame) Name() string {
 	return f.name()
 }
- 
