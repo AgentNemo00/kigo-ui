@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -284,12 +283,9 @@ func (h *Handler) Transmission(ctx context.Context, dataChan chan Data, frames *
 				close()
 				return
 			default:
-				// none blocking
+				//blocking until data or timeout
 				data, err := frames.Read(Nctx)
 				if err != nil {
-					if errors.Is(err, frame.ErrEmpty){
-						continue
-					}
 					cancel()
 					close()
 					log.Ctx(ctx).Err(err)

@@ -45,29 +45,34 @@ func NewFrame(read Read, close Close, name Name, packageTimeout time.Duration, a
 }
 
 func (f *Frame) Read(ctx context.Context) ([]byte, error) {
-	// timeout between packages
-	if f.timeoutPerRead != 0 && f.bufferEmptyTimeout.Add(f.timeoutPerRead).Before(time.Now()) && f.started {
-		return nil, ErrTimeout
+	for {
+		select {
+			case <- ctx.Done():
+				return nil, ctx.Err()
+		default:		// timeout between packages
+			if f.timeoutPerRead != 0 && f.bufferEmptyTimeout.Add(f.timeoutPerRead).Before(time.Now()) && f.started {
+				return nil, ErrTimeout
+			}
+			// timeout total
+			if !f.startAt.IsZero() && f.startAt != f.endAtAbsolute && f.endAtAbsolute.Before(time.Now()) && f.started {
+				// error timeout 
+				return nil, ErrTime
+			}
+			// none blocking
+			data, err := f.read(ctx)
+			// no error, new package
+			if err == nil {
+				f.bufferEmptyTimeout = time.Now()
+				return data, nil
+			}
+			if errors.Is(err, ErrEmpty) {
+				continue
+			}
+			if errors.Is(err, ErrClosed) {
+				return nil, ErrClosed
+			}
+		}
 	}
-	// timeout total
-	if !f.startAt.IsZero() && f.startAt != f.endAtAbsolute && f.endAtAbsolute.Before(time.Now()) && f.started {
-		// error timeout 
-		return nil, ErrTime
-	}
-	// none blocking
-	data, err := f.read(ctx)
-	// no error, new package
-	if err == nil {
-		f.bufferEmptyTimeout = time.Now()
-		return data, nil
-	}
-	if errors.Is(err, ErrEmpty) {
-		return nil, ErrEmpty
-	}
-	if errors.Is(err, ErrClosed) {
-		return nil, ErrClosed
-	}
-	return nil, nil
 }
 
 func (f *Frame) Close() {
