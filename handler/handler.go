@@ -199,6 +199,7 @@ func (h *Handler) Start(ctx context.Context) error {
 }
 
 func (h *Handler) StartRenderHandshake(ctx context.Context, from string, payload inquiry.InquiryRenderPayload) error {
+	// create channel name for the transmission
 	name, err := security.UUID()
 	if err != nil {
 		h.Error(ctx, from, errcore.Internal)
@@ -224,6 +225,7 @@ func (h *Handler) StartRenderHandshake(ctx context.Context, from string, payload
 	if objID == 0 {
 		objID = h.window.EnsureID()
 	}
+	// create channel for the transmission
 	switch(payload.Channel) {
 		case ui.IPC:
 			log.Ctx(ctx).Debug("choose channel ipc")
@@ -246,27 +248,27 @@ func (h *Handler) StartRenderHandshake(ctx context.Context, from string, payload
 		default:
 			h.Error(ctx, from, errcore.Unsupported)
 			return fmt.Errorf("not supported channel")
-		}
-		width, height := h.window.Size()
-		err = h.communication.PubModule.Publish(ctx, from, order.Order{
-			From: h.config.Name,
-			To: from,
-			Order: order.OrderRender,
-			Payload: order.OrderRenderPayload{
-				ScreenWidth: width,
-				ScreenHeight: height,
-				MaxFrameSize: frameSize,
-				ChannelName: channel.Name(),
-				ObjectID: int(objID),
-			},
-		})
-		if err != nil {
-			log.Ctx(ctx).Err(err)
-			return err
-		}
-		go h.Transform(ctxTransmission, dataChan, payload.Format, h.pkgChan)
-		go h.Transmission(ctxTransmission, dataChan, channel, payload, channelClose)
-		return nil
+	}
+	width, height := h.window.Size()
+	err = h.communication.PubModule.Publish(ctx, from, order.Order{
+		From: h.config.Name,
+		To: from,
+		Order: order.OrderRender,
+		Payload: order.OrderRenderPayload{
+			ScreenWidth: width,
+			ScreenHeight: height,
+			MaxFrameSize: frameSize,
+			ChannelName: channel.Name(),
+			ObjectID: int(objID),
+		},
+	})
+	if err != nil {
+		log.Ctx(ctx).Err(err)
+		return err
+	}
+	go h.Transform(ctxTransmission, dataChan, payload.Format, h.pkgChan)
+	go h.Transmission(ctxTransmission, dataChan, channel, payload, channelClose)
+	return nil
 }
 
 func (h *Handler) Transmission(ctx context.Context, dataChan chan Data, frames *frame.Frame, payload inquiry.InquiryRenderPayload, close func()) {
@@ -325,31 +327,41 @@ func (h *Handler) Transform(ctx context.Context, dataChan chan Data, format stri
 				height := binary.BigEndian.Uint16(dataPackage.Data[10:12])
 				size := binary.BigEndian.Uint32(dataPackage.Data[12:16])
 				log.Ctx(ctx).Info("size of data from %d: %d", id, size)
-				data := make([]byte, 0)
-				if size > 0 {
-					data = dataPackage.Data[headerSize:headerSize+size]
-					if format != ui.RAW {
-						switch(format) {
-							case ui.PNG:
-								dataDecoded, err := frame.DecodePNG(ctx, data)
-								if err != nil {
-									log.Ctx(ctx).Err(err)
-									continue
-								}
-								data = dataDecoded
-							case ui.JPEG:
-								dataDecoded, err := frame.DecodeJPEG(ctx, data)
-								if err != nil {
-									log.Ctx(ctx).Err(err)
-									continue
-								}
-								data = dataDecoded
-							default:
-								log.Ctx(ctx).Error("unsupported format: %s", format)
-								continue
-						}
-					}	
+				if size <= 0 {
+					log.Ctx(ctx).Debug("received empty data package ")			 
+					packageChan <- paint.Package{
+						ID: 		id,	
+						PositionX: 	int(positionX),
+						PositionY: 	int(positionY),
+						Width: 		int(width),
+						Height: 	int(height),
+						Data: 		make([]byte, 0),
+					}
+					return
 				}
+				data := dataPackage.Data[headerSize:headerSize+size]
+				if format != ui.RAW {
+					// decode data
+					switch(format) {
+						case ui.PNG:
+							dataDecoded, err := frame.DecodePNG(ctx, data)
+							if err != nil {
+								log.Ctx(ctx).Err(err)
+								continue
+							}
+							data = dataDecoded
+						case ui.JPEG:
+							dataDecoded, err := frame.DecodeJPEG(ctx, data)
+							if err != nil {
+								log.Ctx(ctx).Err(err)
+								continue
+							}
+							data = dataDecoded
+						default:
+							log.Ctx(ctx).Error("unsupported format: %s", format)
+							continue
+					}
+				}	
 				log.Ctx(ctx).Debug("received data package %d, on position %d, %d and dimensions %d, %d", id, positionX, positionY, width, height)			 
 				packageChan <- paint.Package{
 					ID: 		id,	
