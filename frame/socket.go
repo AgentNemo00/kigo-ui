@@ -2,14 +2,12 @@ package frame
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path"
 	"time"
 
 	"github.com/AgentNemo00/sca-instruments/log"
-	"github.com/EBWi11/mmap_ringbuffer"
 	"github.com/gogpu/compose"
 )
 
