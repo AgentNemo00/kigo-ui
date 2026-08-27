@@ -28,7 +28,7 @@ type Frame struct {
 	started 			bool 			// read at least one package
 	startAt 			time.Time		// time since when it is listening
 	endAtAbsolute 		time.Time		// end at absolut
-	bufferEmptyTimeout 	time.Time		
+	bufferEmptyTimeout 	time.Time
 	timeoutPerRead 		time.Duration	// timeout between packages
 }
 
@@ -37,7 +37,7 @@ func NewFrame(read Read, close Close, name Name, packageTimeout time.Duration, a
 		read: read,
 		close: close,
 		name: name,
-		startAt: time.Now(),
+		startAt: time.Time{},
 		endAtAbsolute: time.Now().Add(absoluteTimeout),
 		timeoutPerRead: packageTimeout,
 
@@ -50,7 +50,7 @@ func (f *Frame) Read(ctx context.Context) ([]byte, error) {
 			case <- ctx.Done():
 				return nil, ctx.Err()
 		default:		// timeout between packages
-			if f.timeoutPerRead != 0 && f.bufferEmptyTimeout.Add(f.timeoutPerRead).Before(time.Now()) && f.started {
+			if !f.startAt.IsZero() && f.timeoutPerRead != 0 && f.bufferEmptyTimeout.Add(f.timeoutPerRead).Before(time.Now()) && f.started {
 				return nil, ErrTimeout
 			}
 			// timeout total
@@ -70,6 +70,12 @@ func (f *Frame) Read(ctx context.Context) ([]byte, error) {
 			}
 			if errors.Is(err, ErrClosed) {
 				return nil, ErrClosed
+			}
+			if data != nil {
+				if f.startAt.IsZero() {
+					f.startAt = time.Now()
+				}
+				return data, nil
 			}
 		}
 	}
