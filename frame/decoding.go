@@ -10,6 +10,7 @@ import (
 	"image/png"
 )
 
+// DecodePNG decodes a PNG image from the provided byte slice and returns the raw pixel data in RGBA format.
 func DecodePNG(ctx context.Context, data []byte) ([]byte, error) {
 	if len(data) < 8 {
 		return nil, fmt.Errorf("data too small for PNG")
@@ -29,6 +30,7 @@ func DecodePNG(ctx context.Context, data []byte) ([]byte, error) {
 	return dst.Pix, nil
 }
 
+// DecodeJPEG decodes a JPEG image from the provided byte slice and returns the raw pixel data in RGBA format.
 func DecodeJPEG(ctx context.Context, data []byte) ([]byte, error) {
 	if len(data) < 2 || data[0] != 0xFF || data[1] != 0xD8 {
 		return nil, fmt.Errorf("not a JPEG stream")
