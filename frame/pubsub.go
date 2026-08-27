@@ -27,13 +27,19 @@ func NewPubSub(url string) (*PubSub, error) {
 func (p *PubSub) Open(ctx context.Context, name string, timeoutPerRead time.Duration, timeoutTotal time.Duration) (*Frame, error) {
 	frameChan := make(chan []byte)
 	frameErr := make(chan error)
-	frameHandler := &Frame{
-		started: false,
-		startAt: time.Now(),
-		endAtAbsolute: time.Now(),
-		bufferEmptyTimeout: time.Now(),
-		timeoutPerRead: timeoutPerRead,
-		read: func(Nctx context.Context) ([]byte, error) {
+	subscription, err := p.sub.Subscribe(ctx, name, func(ctx context.Context, metadata pubsub.Metadata, data *[]byte) {
+		if metadata.Error != nil {
+			log.Ctx(ctx).Error("received error in message: %v", metadata.Error)
+			frameErr <- metadata.Error
+			return
+		}
+		frameChan <- *data
+	} )
+	if err != nil {
+		return nil, err
+	}
+	frameHandler := NewFrame(
+		func(Nctx context.Context) ([]byte, error) {
 			select{
 			case <- Nctx.Done():
 				return nil, Nctx.Err()
@@ -51,25 +57,16 @@ func (p *PubSub) Open(ctx context.Context, name string, timeoutPerRead time.Dura
 				return nil, ErrEmpty
 			}
 		},
-		name: func () string {
+		func ()  {
+			subscription.Unsubscribe(ctx)
+			close(frameChan)
+			close(frameErr)
+			},
+		func() string {
 			return name
 		},
-	}
-	subscription, err := p.sub.Subscribe(ctx, name, func(ctx context.Context, metadata pubsub.Metadata, data *[]byte) {
-		if metadata.Error != nil {
-			log.Ctx(ctx).Error("received error in message: %v", metadata.Error)
-			frameErr <- metadata.Error
-			return
-		}
-		frameChan <- *data
-	} )
-	if err != nil {
-		return nil, err
-	}
-	frameHandler.close = func ()  {
-		subscription.Unsubscribe(ctx)
-		close(frameChan)
-		close(frameErr)
-	}
+		timeoutPerRead,
+		timeoutTotal,
+	)
 	return frameHandler, nil
 }
