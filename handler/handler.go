@@ -276,7 +276,6 @@ func (h *Handler) Transmission(ctx context.Context, dataChan chan Data, frames *
 	if payload.FPS != 0 {
 		estimatedWaitingTime = time.Duration(time.Millisecond*time.Duration(1000/payload.FPS))
 	}
-	log.Ctx(ctx).Info("estimated sleeping: %d", estimatedWaitingTime.Milliseconds())
 	Nctx, cancel := context.WithCancel(ctx)
 	for {
 		select {
