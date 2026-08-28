@@ -326,7 +326,6 @@ func (h *Handler) Transform(ctx context.Context, dataChan chan Data, format stri
 				width := binary.BigEndian.Uint16(dataPackage.Data[8:10])
 				height := binary.BigEndian.Uint16(dataPackage.Data[10:12])
 				size := binary.BigEndian.Uint32(dataPackage.Data[12:16])
-				log.Ctx(ctx).Info("size of data from %d: %d", id, size)
 				if size <= 0 {
 					log.Ctx(ctx).Debug("received empty data package ")			 
 					packageChan <- paint.Package{

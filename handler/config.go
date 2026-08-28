@@ -29,7 +29,7 @@ func (c *Config) Default() {
 		c.IPCPath = "/tmp"
 	} 
 	if c.FPS == 0 {
-		c.FPS = 24
+		c.FPS = 30
 	}
 	if len(c.Formats) == 0 {
 		c.Formats = []string{ui.RAW, ui.PNG, ui.JPEG}
