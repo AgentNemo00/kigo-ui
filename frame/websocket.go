@@ -2,7 +2,6 @@ package frame
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
