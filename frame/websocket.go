@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"http"
-	"path"
 	"time"
 
 	"github.com/AgentNemo00/sca-instruments/log"
@@ -63,15 +62,12 @@ func (s *WebSocket) Open(ctx context.Context, name string, timeoutPerRead time.D
 			if s.closed {
 				return
 			}
-			err := srv.Close()
-			if err != nil {
-				log.Ctx(ctx).Err(err)
-			}
+			// TODO: close websocket connection
 			close(received)
 			s.closed = true
 		},
 		func () string {
-			return path.Join(s.path, name)
+			return name
 		},
 		timeoutPerRead,
 		timeoutTotal,
