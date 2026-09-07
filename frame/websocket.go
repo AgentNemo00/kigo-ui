@@ -3,7 +3,7 @@ package frame
 import (
 	"context"
 	"fmt"
-	"http"
+	"net/http"
 	"time"
 
 	"github.com/AgentNemo00/sca-instruments/log"
@@ -22,28 +22,31 @@ func NewWebSocket(addr string) (*WebSocket, error) {
 
 func (s *WebSocket) Open(ctx context.Context, name string, timeoutPerRead time.Duration, timeoutTotal time.Duration) (*Frame, error) {
 	received := make(chan []byte)
-	http.HandleFunc(fmt.Sprintf("/%s", name), func(w http.ResponseWriter, r *http.Request) {
-		conn, err := s.upgrade.Upgrade(w, r, nil)
-		if err != nil {
-			log.Ctx(ctx).Err(err)
-			return
-		}
-		defer conn.Close()
-		for {
-			select {
-				case <- ctx.Done():
-					return
-			default:
-				_, message, err := conn.ReadMessage()
-				if err != nil {
-					log.Ctx(ctx).Err(err)
-					break
-				}
-				received <- message
+	srv := &http.Server{
+		Addr: s.addr,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			conn, err := s.upgrade.Upgrade(w, r, nil)
+			if err != nil {
+				log.Ctx(ctx).Err(err)
+				return
 			}
-		}
-	})
-	go http.ListenAndServe(s.addr, nil)
+			defer conn.Close()
+			for {
+				select {
+					case <- ctx.Done():
+						return
+				default:
+					_, message, err := conn.ReadMessage()
+					if err != nil {
+						log.Ctx(ctx).Err(err)
+						break
+					}
+					received <- message
+				}
+			}
+		}),
+	}
+	go srv.ListenAndServe()
 	f := NewFrame(
 		func (Nctx context.Context) ([]byte, error) {
 		select{
@@ -62,7 +65,10 @@ func (s *WebSocket) Open(ctx context.Context, name string, timeoutPerRead time.D
 			if s.closed {
 				return
 			}
-			// TODO: close websocket connection
+			err := srv.Close()
+			if err != nil {
+				log.Ctx(ctx).Err(err)
+			}
 			close(received)
 			s.closed = true
 		},
