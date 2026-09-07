@@ -26,7 +26,8 @@ func NewWindow(ctx context.Context) (*Window ,error) {
 	w := &Window{saved: make([]uint32, 0), ticksEnsuranceSaved: rand.Uint32()}
 	app := gogpu.NewApp(gogpu.DefaultConfig().
 		WithTitle(" ").
-		WithFullscreen().
+		WithFullscreen(). // TODO: fullscreen not working on macOS, need to investigate
+		WithFrameless(true).
 		WithContinuousRender(false))
 	var canvas *ggcanvas.Canvas
 	mu := new(sync.Mutex)
