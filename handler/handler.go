@@ -267,27 +267,25 @@ func (h *Handler) StartRenderHandshake(ctx context.Context, from string, payload
 		return err
 	}
 	go h.Transform(ctxTransmission, dataChan, payload.Format, h.pkgChan)
-	go h.Transmission(ctxTransmission, dataChan, channel, payload, channelClose)
+	go h.Transmission(ctxTransmission, cancel, dataChan, channel, payload, channelClose)
 	return nil
 }
 
-func (h *Handler) Transmission(ctx context.Context, dataChan chan Data, frames *frame.Frame, payload inquiry.InquiryRenderPayload, close func()) {
+func (h *Handler) Transmission(ctx context.Context, cancel context.CancelFunc, dataChan chan Data, frames *frame.Frame, payload inquiry.InquiryRenderPayload, close func()) {
 	estimatedWaitingTime := time.Duration(0)
 	if payload.FPS != 0 {
 		estimatedWaitingTime = time.Duration(time.Millisecond*time.Duration(1000/payload.FPS))
 	}
-	Nctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	for {
 		select {
-			case <- Nctx.Done():
-				cancel()
+			case <- ctx.Done():
 				close()
 				return
 			default:
 				//blocking until data or timeout
-				data, err := frames.Read(Nctx)
+				data, err := frames.Read(ctx)
 				if err != nil {
-					cancel()
 					close()
 					log.Ctx(ctx).Err(err)
 					return
