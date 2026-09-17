@@ -333,7 +333,7 @@ func (h *Handler) Transform(ctx context.Context, dataChan chan Data, format stri
 						Height: 	int(height),
 						Data: 		make([]byte, 0),
 					}
-					return
+					continue
 				}
 				data := dataPackage.Data[headerSize:headerSize+size]
 				if format != ui.RAW {
