@@ -211,9 +211,12 @@ func (h *Handler) StartRenderHandshake(ctx context.Context, from string, payload
 	var channel *frame.Frame
 	channelClose := func ()  {
 		log.Ctx(ctx).Info("channel closed")
-		channel.Close()
-		close(dataChan)
 		cancel()
+		_, ok := <- dataChan
+		if ok {
+			close(dataChan)
+		}
+		channel.Close()
 	}
 	frameSize := payload.MaxFrameSize
 	if frameSize <= 0 {
@@ -266,27 +269,25 @@ func (h *Handler) StartRenderHandshake(ctx context.Context, from string, payload
 		log.Ctx(ctx).Err(err)
 		return err
 	}
-	go h.Transform(ctxTransmission, dataChan, payload.Format, h.pkgChan)
-	go h.Transmission(ctxTransmission, cancel, dataChan, channel, payload, channelClose)
+	go h.Transform(ctxTransmission, dataChan, payload.Format, h.pkgChan, channelClose)
+	go h.Transmission(ctxTransmission, dataChan, channel, payload, channelClose)
 	return nil
 }
 
-func (h *Handler) Transmission(ctx context.Context, cancel context.CancelFunc, dataChan chan Data, frames *frame.Frame, payload inquiry.InquiryRenderPayload, close func()) {
+func (h *Handler) Transmission(ctx context.Context, dataChan chan Data, frames *frame.Frame, payload inquiry.InquiryRenderPayload, close func()) {
+	defer close()
 	estimatedWaitingTime := time.Duration(0)
 	if payload.FPS != 0 {
 		estimatedWaitingTime = time.Duration(time.Millisecond*time.Duration(1000/payload.FPS))
 	}
-	defer cancel()
 	for {
 		select {
 			case <- ctx.Done():
-				close()
 				return
 			default:
 				//blocking until data or timeout
 				data, err := frames.Read(ctx)
 				if err != nil {
-					close()
 					log.Ctx(ctx).Err(err)
 					return
 				}
@@ -302,7 +303,8 @@ func (h *Handler) Transmission(ctx context.Context, cancel context.CancelFunc, d
 	}
 }
 
-func (h *Handler) Transform(ctx context.Context, dataChan chan Data, format string, packageChan chan paint.Package) {
+func (h *Handler) Transform(ctx context.Context, dataChan chan Data, format string, packageChan chan paint.Package, close func()) {
+	defer close()
 	for {
 		select {
 			case <- ctx.Done():
