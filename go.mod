@@ -3,7 +3,7 @@ module github.com/AgentNemo00/kigo-ui
 go 1.26.0
 
 require (
-	github.com/AgentNemo00/kigo-core v0.5.28
+	github.com/AgentNemo00/kigo-core v0.5.29
 	github.com/AgentNemo00/sca-instruments v0.6.4
 	github.com/EBWi11/mmap_ringbuffer v0.1.3
 	github.com/gogpu/gg v0.52.3

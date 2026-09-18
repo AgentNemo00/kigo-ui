@@ -14,6 +14,7 @@ import (
 	"github.com/AgentNemo00/kigo-core/notification"
 	"github.com/AgentNemo00/kigo-core/order"
 	"github.com/AgentNemo00/kigo-core/ui"
+	"github.com/AgentNemo00/kigo-core/wire"
 	"github.com/AgentNemo00/kigo-core/update"
 	"github.com/AgentNemo00/kigo-ui/frame"
 	"github.com/AgentNemo00/kigo-ui/paint"
@@ -25,7 +26,7 @@ import (
 )
 
 const(
-	headerSize = 16
+	headerSize = 18
 )
 
 type Handler struct {
@@ -319,12 +320,28 @@ func (h *Handler) Transform(ctx context.Context, dataChan chan Data, format stri
 					return
 				}
 				id := binary.BigEndian.Uint32(dataPackage.Data[0:4])
+				cmd := binary.BigEndian.Uint16(dataPackage.Data[4:6])
 				log.Ctx(ctx).Debug("got data to transform from %d", id)
-				positionX := binary.BigEndian.Uint16(dataPackage.Data[4:6])
-				positionY := binary.BigEndian.Uint16(dataPackage.Data[6:8])
-				width := binary.BigEndian.Uint16(dataPackage.Data[8:10])
-				height := binary.BigEndian.Uint16(dataPackage.Data[10:12])
-				size := binary.BigEndian.Uint32(dataPackage.Data[12:16])
+				positionX := binary.BigEndian.Uint16(dataPackage.Data[6:8])
+				positionY := binary.BigEndian.Uint16(dataPackage.Data[8:10])
+				width := binary.BigEndian.Uint16(dataPackage.Data[10:12])
+				height := binary.BigEndian.Uint16(dataPackage.Data[12:14])
+				size := binary.BigEndian.Uint32(dataPackage.Data[14:18])
+				switch(cmd) {
+					case wire.Clear:
+						packageChan <- paint.Package{
+							ID: 		id,	
+							PositionX: 	int(positionX),
+							PositionY: 	int(positionY),
+							Width: 		int(width),
+							Height: 	int(height),
+							Data: 		make([]byte, 0),
+						}
+						continue
+					case wire.Close:
+						return
+					default:
+					}
 				if size <= 0 {
 					log.Ctx(ctx).Debug("received empty data package ")			 
 					packageChan <- paint.Package{
