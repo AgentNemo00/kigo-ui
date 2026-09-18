@@ -210,7 +210,12 @@ func (h *Handler) StartRenderHandshake(ctx context.Context, from string, payload
 	ctxTransmission, cancel := context.WithCancel(ctx)
 	dataChan := make(chan Data)
 	var channel *frame.Frame
+	closed := false
 	channelClose := func ()  {
+		if closed {
+			return
+		}
+		closed = true
 		log.Ctx(ctx).Info("channel closed")
 		cancel()
 		_, ok := <- dataChan
