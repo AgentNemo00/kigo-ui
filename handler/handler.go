@@ -336,6 +336,7 @@ func (h *Handler) Transform(ctx context.Context, dataChan chan Data, format stri
 					case wire.Clear:
 						packageChan <- paint.Package{
 							ID: 		id,	
+							CMD: 		cmd,
 							PositionX: 	int(positionX),
 							PositionY: 	int(positionY),
 							Width: 		int(width),
@@ -351,6 +352,7 @@ func (h *Handler) Transform(ctx context.Context, dataChan chan Data, format stri
 					log.Ctx(ctx).Debug("received empty data package ")			 
 					packageChan <- paint.Package{
 						ID: 		id,	
+						CMD: 		cmd,
 						PositionX: 	int(positionX),
 						PositionY: 	int(positionY),
 						Width: 		int(width),
@@ -358,6 +360,10 @@ func (h *Handler) Transform(ctx context.Context, dataChan chan Data, format stri
 						Data: 		make([]byte, 0),
 					}
 					continue
+				}
+				if headerSize+size > uint32(len(dataPackage.Data)) {
+					log.Ctx(ctx).Error("received data package is too small for the given size: %d, %d", headerSize+size, len(dataPackage.Data))
+					size = uint32(len(dataPackage.Data)) - headerSize
 				}
 				data := dataPackage.Data[headerSize:headerSize+size]
 				if format != ui.RAW {
@@ -385,6 +391,7 @@ func (h *Handler) Transform(ctx context.Context, dataChan chan Data, format stri
 				log.Ctx(ctx).Debug("received data package %d, on position %d, %d and dimensions %d, %d", id, positionX, positionY, width, height)			 
 				packageChan <- paint.Package{
 					ID: 		id,	
+					CMD: 		cmd,
 					PositionX: 	int(positionX),
 					PositionY: 	int(positionY),
 					Width: 		int(width),
@@ -407,16 +414,24 @@ func (h *Handler) Draw(ctx context.Context, window *window.Window, packageChan c
 					return nil
 				}
 				log.Ctx(ctx).Debug("got data to draw from %d", pkg.ID)
-				if len(pkg.Data) == 0 {
-					log.Ctx(ctx).Debug("Remove id %d", pkg.ID)
-					window.Remove(pkg.ID)
-				} else {
-					err := window.Add(pkg)
-					if err != nil {
-						log.Ctx(ctx).Err(err)
-						return err
-					} 
-					log.Ctx(ctx).Debug("Add id %d", pkg.ID)
+				switch(pkg.CMD) {
+					case wire.Clear:
+						log.Ctx(ctx).Debug("Clear id %d", pkg.ID)
+						window.Remove(pkg.ID)
+					case wire.Update:
+						log.Ctx(ctx).Debug("Update id %d", pkg.ID)
+						err := window.Update(pkg)
+						if err != nil {
+							log.Ctx(ctx).Err(err)
+							return err
+						}
+					default:
+						err := window.Add(pkg)
+						if err != nil {
+							log.Ctx(ctx).Err(err)
+							return err
+						} 
+						log.Ctx(ctx).Debug("Add id %d", pkg.ID)
 				}
 				window.Draw()
 			}

@@ -126,6 +126,22 @@ func (w *Window) Add(pkg paint.Package) error {
 	return nil
 }
 
+func (w *Window) Update(pkg paint.Package) error {
+	img := &image.RGBA{
+		Pix:    pkg.Data,
+		Stride: 4 * pkg.Width,
+		Rect:   image.Rect(0, 0, pkg.Width, pkg.Height),
+	}
+
+	w.mu.Lock()
+	defer w.ResetEnsurance()
+	defer w.mu.Unlock()
+	frame := (*w.frames)[pkg.ID]
+	frame.Blit(img, pkg.PositionX, pkg.PositionY)
+	
+	return nil
+}
+
 func (w *Window) IsPointOccupied(x, y int) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
